@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Heatmap Analysis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+        }
+        .analysis-container {
+            margin-top: 40px;
+            border: 1px solid #ccc;
+            padding: 20px;
+            background: #f9f9f9;
+        }
+        a {
+            display: inline-block;
+            margin-top: 20px;
+            text-decoration: none;
+            color: #007BFF;
+        }
+    </style>
+</head>
+<body>
+    <h1>Heatmap Analysis</h1>
+    <div class="analysis-container">
+        <p id="analysis-result">{{ analysis }}</p>
+    </div>
+    <a href="/">Go back to home</a>
+
+    <script>
+        // Fetch the analysis result from the backend
+        fetch("http://127.0.0.1:5000/get_analysis")
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Failed to fetch analysis");
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    document.getElementById("analysis-result").innerText = "Error: " + data.error;
+                } else {
+                    document.getElementById("analysis-result").innerText = data.analysis;
+                }
+            })
+            .catch(error => {
+                console.error("Error fetching analysis:", error);
+                document.getElementById("analysis-result").innerText = "Error: Unable to fetch analysis.";
+            });
+    </script>
+</body>
+</html>
