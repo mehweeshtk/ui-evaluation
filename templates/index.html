@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGazer Eye-Tracking Heatmap</title>
+    <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/heatmap.js/2.0.2/heatmap.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        #start-screen, #calibration-screen, #homepage {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+        .dot {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: red;
+            cursor: pointer;
+        }
+        .dot.yellow { background-color: yellow; }
+        .dot.green { background-color: green; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .grid .dot { justify-self: center; align-self: center; }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            z-index: 2;
+        }
+        #homepage { display: none; }
+        #heatmap-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Start Screen -->
+    <div id="start-screen">
+        <button id="start-calibration">Start Calibration</button>
+    </div>
+
+    <!-- Calibration Screen -->
+    <div id="calibration-screen" style="display: none;">
+        <div class="grid">
+            <div class="dot" data-clicks="0" style="grid-column: 2; grid-row: 1;"></div>
+            <div class="dot" data-clicks="0" style="grid-column: 3; grid-row: 1;"></div>
+            <div class="dot" data-clicks="0" style="grid-column: 1; grid-row: 2;"></div>
+            <div class="dot" data-clicks="0" style="grid-column: 2; grid-row: 2;"></div>
+            <div class="dot" data-clicks="0" style="grid-column: 3; grid-row: 2;"></div>
+            <div class="dot" data-clicks="0" style="grid-column: 1; grid-row: 3;"></div>
+            <div class="dot" data-clicks="0" style="grid-column: 2; grid-row: 3;"></div>
+            <div class="dot" data-clicks="0" style="grid-column: 3; grid-row: 3;"></div>
+        </div>
+    </div>
+
+    <!-- Homepage -->
+    <div id="homepage">
+        <h1>UI Evaluation</h1>
+        <img src="{{ url_for('static', filename='ui_images/Dashboard.png') }}" alt="UI Image">
+        <button id="save-heatmap">Save Heatmap</button>
+        <button id="toggle-heatmap">Toggle Heatmap</button>
+        <button id="show-analysis">Show Analysis</button>
+    </div>
+
+    <!-- Heatmap Container -->
+    <div id="heatmap-container" style="position:absolute; top:0; left:0; width:100vw; height:90vh;"></div>
+
+    <script src="static/script.js"></script>
+
+</body>
+</html>
