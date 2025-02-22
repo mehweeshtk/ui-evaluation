@@ -3,13 +3,13 @@ from flask_cors import CORS
 import io
 from PIL import Image
 import base64
-from google import genai  # Importing the genai client
+from google import genai  
 
 app = Flask(__name__)
 CORS(app)
 
 # Set up the Gemini client using API key
-client = genai.Client(api_key="AIzaSyBAJr67nIOuhXg7x2GRe-vILwEfQ5locGs")  # Replace with your actual Gemini API key
+client = genai.Client(api_key="API key")
 
 # Store analysis result in memory
 analysis_result = None
