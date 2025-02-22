@@ -6,6 +6,13 @@ let gazeData = [];
 let calibrationComplete = false;
 let heatmapVisible = true;
 let heatmapInstance;
+let currentImageIndex = 0;
+const uiImages = [
+    "/static/ui_images/Dashboard1.png",
+    "/static/ui_images/Dashboard2.png",
+    "/static/ui_images/Dashboard3.png"  // Added missing quote and comma
+];
+const heatmaps = {};
 
 // Debugging: Check if WebGazer is loaded
 if (typeof webgazer === "undefined") {
@@ -77,27 +84,74 @@ function initializeHeatmap() {
     } else {
         console.log("Heatmap already initialized.");
     }
+    // Set the height of the heatmap canvas dynamically
+    const heatmapCanvas = container.querySelector("canvas");
+    if (heatmapCanvas) {
+        heatmapCanvas.style.height = '620px'; // Set your desired height
+    }
 }
 
 
-// Start Tracking
+// Modify startTracking function
 function startTracking() {
     initializeHeatmap();
+    
+    // Configure webgazer video feed
+    webgazer.params.showVideoPreview = true;
+    
+// Updated gaze listener
+webgazer.setGazeListener((data) => {
+    if (data && document.getElementById("homepage").style.display === "flex") {
+        const imgElement = document.getElementById("current-ui");
+        const rect = imgElement.getBoundingClientRect();
+        
+        // Calculate relative coordinates within the image
+        const x = data.x - rect.left;
+        const y = data.y - rect.top;
+        
+        // Only record points within image bounds
+        if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
+            heatmaps[currentImageIndex] = heatmaps[currentImageIndex] || [];
+            heatmaps[currentImageIndex].push({
+                x: (x / rect.width * 100),  // Convert to percentage
+                y: (y / rect.height * 100), // Convert to percentage
+                value: 1
+            });
 
-    webgazer.setGazeListener((data) => {
-        if (data && document.getElementById("homepage").style.display === "flex") {
-            const x = data.x;
-            const y = data.y;
-            gazeData.push({ x, y, value: 1 });
-
+            // Update heatmap with relative coordinates
             heatmapInstance.addData({
                 x: x,
                 y: y,
                 value: 1
             });
         }
-    }).begin();
+    }
+}).begin();
 }
+
+// 4. Add heatmap reset when changing images
+function loadUIImage(index) {
+    if (index < 0 || index >= uiImages.length) return;
+    
+    currentImageIndex = index;
+    const imgElement = document.getElementById("current-ui");
+    
+    // Wait for image load before resetting heatmap
+    imgElement.onload = () => {
+        if (heatmapInstance) {
+            heatmapInstance.setData({
+                max: 1,
+                data: []
+            });
+        }
+        heatmaps[currentImageIndex] = [];
+    };
+    imgElement.src = uiImages[currentImageIndex];
+}
+
+// Add event listeners for navigation
+document.getElementById("next-ui").addEventListener("click", () => loadUIImage(currentImageIndex + 1));
+document.getElementById("prev-ui").addEventListener("click", () => loadUIImage(currentImageIndex - 1));
 
 // Toggle Heatmap Visibility
 function toggleHeatmap() {
@@ -218,5 +272,3 @@ function showAnalysis() {
 
 // Add event listener for "Show Analysis" button
 document.getElementById("show-analysis").addEventListener("click", showAnalysis);
-
-
