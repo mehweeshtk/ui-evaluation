@@ -4,15 +4,17 @@ import io
 from PIL import Image
 import base64
 from google import genai  
+import cv2
+import numpy as np
 
 app = Flask(__name__)
 CORS(app)
 
-# Set up the Gemini client using API key
-client = genai.Client(api_key="API key")
+client = genai.Client(api_key="API_key") 
 
-# Store analysis result in memory
-analysis_result = None
+# analysis_result = None
+
+analysis_data = {"text": None, "image": None}
 
 @app.route("/")
 def home():
@@ -20,46 +22,78 @@ def home():
 
 @app.route("/upload_heatmap", methods=["POST"])
 def upload_heatmap():
-    global analysis_result
+    global analysis_data
 
-    if "heatmap" not in request.files:
-        return jsonify(error="No file uploaded"), 400
+    if "heatmap" not in request.files or "ui_image" not in request.files:
+        return jsonify(error="No files uploaded"), 400
 
     try:
-        # Convert uploaded file to PIL Image
+        # Get both files from request
         heatmap_file = request.files["heatmap"]
-        image = Image.open(io.BytesIO(heatmap_file.read())).convert("RGB")
+        ui_file = request.files["ui_image"]
+        
+        # Read and process images
+        ui_img = Image.open(ui_file).convert("RGBA")
+        heatmap_img = Image.open(heatmap_file).convert("RGBA")
 
-        # Resize image to reduce memory usage
-        image = image.resize((224, 224))  # Adjust resolution as needed
+        # Convert to numpy arrays
+        ui_np = np.array(ui_img)
+        heatmap_np = np.array(heatmap_img)
 
-        # Convert image to base64 for Gemini API
+        # Resize heatmap to match UI image dimensions
+        if ui_np.shape[:2] != heatmap_np.shape[:2]:
+            heatmap_np = cv2.resize(heatmap_np, (ui_np.shape[1], ui_np.shape[0]))
+
+        # Normalize alpha channel to 0-1 range
+        alpha = heatmap_np[..., 3] / 255.0
+        alpha = np.expand_dims(alpha, axis=-1)  # Add channel dimension
+
+        # Convert images to float for calculations
+        ui_float = ui_np.astype(np.float32) / 255.0
+        heatmap_float = heatmap_np.astype(np.float32) / 255.0
+
+        # Perform alpha blending
+        blended = ui_float * (1 - alpha) + heatmap_float * alpha
+
+        # Convert back to 8-bit format
+        blended = (blended * 255).astype(np.uint8)
+        combined_img = Image.fromarray(blended)
+
+        # Prepare for Gemini API
         buffered = io.BytesIO()
-        image.save(buffered, format="PNG")
-        image_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        combined_img.save(buffered, format="PNG")
+        combined_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-        # Prepare content for Gemini API request
-        contents = "This is a heatmap showing user gaze data. Analyze the heatmap and describe the areas where users looked the most and the least.."
+        prompt = "This is a heatmap showing user gaze data. Analyze the heatmap and describe the areas where users looked the most and the least."
 
-        # Call the Gemini API to analyze the heatmap
         response = client.models.generate_content(
-            model="gemini-2.0-flash",  # Using the correct model for analysis
-            contents=[image_base64, contents]
+            model="gemini-2.0-flash",
+            contents=[{
+                "parts": [
+                    {"text": prompt},
+                    {"inline_data": {"mime_type": "image/png", "data": combined_base64}}
+                ]
+            }]
         )
-
-        # Extract analysis from Gemini API response
-        analysis_result = response.text  # Assuming the response contains text as the analysis result
-
+        
+        # analysis_result = response.text
+        analysis_data = {
+            "text": response.text,
+            "image": combined_base64  
+        }
         return jsonify(message="Heatmap uploaded and analyzed successfully")
+
     except Exception as e:
         print("Error processing heatmap:", str(e))
         return jsonify(error="Failed to analyze heatmap", details=str(e)), 500
 
 @app.route("/get_analysis", methods=["GET"])
 def get_analysis():
-    global analysis_result
-    if analysis_result:
-        return jsonify(analysis=analysis_result)
+    if analysis_data["text"]:
+        return jsonify({
+            "analysis": analysis_data["text"],
+            "image": analysis_data["image"]
+        })
     else:
         return jsonify(error="No analysis available"), 404
 
@@ -68,4 +102,4 @@ def analysis():
     return render_template("analysis.html")
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=False)  # Disable debug for production
+    app.run(port=5000, debug=True)
