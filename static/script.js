@@ -10,7 +10,7 @@ let currentImageIndex = 0;
 const uiImages = [
     "/static/ui_images/Dashboard1.png",
     "/static/ui_images/Dashboard2.png",
-    "/static/ui_images/Dashboard3.png"  // Added missing quote and comma
+    "/static/ui_images/Dashboard3.png" 
 ];
 const heatmaps = {};
 
@@ -205,21 +205,49 @@ function saveHeatmapLocally() {
         return;
     }
 
+    // Get the currently displayed UI image (assuming it's the active image)
+    const imgElement = document.querySelector("#current-ui");  // Adjust if the image has a different ID or selector
+    if (!imgElement) {
+        console.error("UI image not found.");
+        return;
+    }
+
+    // Convert the currently displayed UI image to a Blob
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    
+    // Set canvas size to match the image size
+    canvas.width = imgElement.naturalWidth;
+    canvas.height = imgElement.naturalHeight;
+    
+    // Draw the image on the canvas
+    context.drawImage(imgElement, 0, 0);
+
     // Convert canvas to Blob
-    heatmapCanvas.toBlob((blob) => {
+    canvas.toBlob((blob) => {
         if (!blob) {
-            console.error("Failed to generate heatmap blob.");
+            console.error("Failed to create Blob from UI image.");
             return;
         }
 
-        // Create FormData object and append the heatmap image
+        // Now you have imgBlob, so you can append both heatmap and UI image to the FormData
         const formData = new FormData();
-        formData.append("heatmap", blob, "heatmap.png");
+        heatmapCanvas.toBlob((heatmapBlob) => {
+            if (!heatmapBlob) {
+                console.error("Failed to generate heatmap blob.");
+                return;
+            }
 
-        // Send the heatmap to the backend
-        uploadHeatmap(formData);
+            // Append the heatmap and UI image Blob to FormData
+            formData.append("heatmap", heatmapBlob, "heatmap.png");
+            formData.append("ui_image", blob, `Dashboard${currentImageIndex + 1}.png`);
+
+            // Send the FormData to the backend
+            uploadHeatmap(formData);
+        }, "image/png");
     }, "image/png");
 }
+
 
 // Upload Heatmap to Backend
 function uploadHeatmap(formData) {
