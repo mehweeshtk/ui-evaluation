@@ -14,6 +14,18 @@
             border: 1px solid #ccc;
             padding: 20px;
             background: #f9f9f9;
+            max-width: 800px;
+            margin: 20px auto;
+        }
+        .image-container {
+            margin: 20px 0;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background: white;
+        }
+        #combined-image {
+            max-width: 100%;
+            height: auto;
         }
         a {
             display: inline-block;
@@ -26,12 +38,14 @@
 <body>
     <h1>Heatmap Analysis</h1>
     <div class="analysis-container">
-        <p id="analysis-result">{{ analysis }}</p>
+        <div class="image-container">
+            <img id="combined-image" alt="Combined Heatmap Visualization">
+        </div>
+        <p id="analysis-result"></p>
     </div>
     <a href="/">Go back to home</a>
 
     <script>
-        // Fetch the analysis result from the backend
         fetch("http://127.0.0.1:5000/get_analysis")
             .then(response => {
                 if (!response.ok) {
@@ -43,6 +57,11 @@
                 if (data.error) {
                     document.getElementById("analysis-result").innerText = "Error: " + data.error;
                 } else {
+                    // Display combined image
+                    const imgElement = document.getElementById("combined-image");
+                    imgElement.src = `data:image/png;base64,${data.image}`;
+                    
+                    // Display analysis text
                     document.getElementById("analysis-result").innerText = data.analysis;
                 }
             })
