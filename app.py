@@ -1,20 +1,52 @@
+import json
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import io
+import os
 from PIL import Image
 import base64
-from google import genai  
 import cv2
 import numpy as np
+from crewai import Agent, Task, Crew, LLM, Process
+from crewai.project import CrewBase, agent, crew, task
+from dotenv import load_dotenv
+from pathlib import Path
+from datetime import datetime
+from crew import UIEvalCrew
+from openai import OpenAI
+import litellm
 
 app = Flask(__name__)
 CORS(app)
 
-client = genai.Client(api_key="API_key") 
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# analysis_result = None
+# Global variable to store analysis data for all images
+analysis_data = {"reports": [], "images": []}
 
-analysis_data = {"text": None, "image": None}
+# Create heatmaps directory
+HEATMAPS_DIR = Path("static/heatmaps")
+HEATMAPS_DIR.mkdir(parents=True, exist_ok=True)
+
+OUTPUT_DIR = Path("output")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+def save_markdown_report(report: str) -> str:
+    """Save the final report as a markdown file with a unique timestamp."""
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    filename = OUTPUT_DIR / f"ui_analysis_{timestamp}.md"
+    with open(filename, "w", encoding="utf-8") as file:
+        file.write(report)
+    return str(filename.absolute())
+
+
+def save_heatmap(image: Image.Image) -> str:
+    """Save blended image to heatmaps directory with timestamp"""
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    filename = HEATMAPS_DIR / f"heatmap_{timestamp}.png"
+    image.save(filename)
+    return str(filename.absolute())
 
 @app.route("/")
 def home():
@@ -28,78 +60,96 @@ def upload_heatmap():
         return jsonify(error="No files uploaded"), 400
 
     try:
-        # Get both files from request
-        heatmap_file = request.files["heatmap"]
-        ui_file = request.files["ui_image"]
-        
-        # Read and process images
-        ui_img = Image.open(ui_file).convert("RGBA")
-        heatmap_img = Image.open(heatmap_file).convert("RGBA")
+        # Process images
+        ui_img = Image.open(request.files["ui_image"]).convert("RGBA")
+        heatmap_img = Image.open(request.files["heatmap"]).convert("RGBA")
 
-        # Convert to numpy arrays
+        # Image processing
         ui_np = np.array(ui_img)
         heatmap_np = np.array(heatmap_img)
 
-        # Resize heatmap to match UI image dimensions
         if ui_np.shape[:2] != heatmap_np.shape[:2]:
             heatmap_np = cv2.resize(heatmap_np, (ui_np.shape[1], ui_np.shape[0]))
 
-        # Normalize alpha channel to 0-1 range
         alpha = heatmap_np[..., 3] / 255.0
-        alpha = np.expand_dims(alpha, axis=-1)  # Add channel dimension
+        alpha = np.expand_dims(alpha, axis=-1)
 
-        # Convert images to float for calculations
         ui_float = ui_np.astype(np.float32) / 255.0
         heatmap_float = heatmap_np.astype(np.float32) / 255.0
 
-        # Perform alpha blending
         blended = ui_float * (1 - alpha) + heatmap_float * alpha
-
-        # Convert back to 8-bit format
         blended = (blended * 255).astype(np.uint8)
         combined_img = Image.fromarray(blended)
 
-        # Prepare for Gemini API
+        # Save image and convert to base64
+        heatmap_path = save_heatmap(combined_img)
         buffered = io.BytesIO()
         combined_img.save(buffered, format="PNG")
         combined_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-        prompt = "This is a heatmap showing user gaze data. Analyze the heatmap and describe the areas where users looked the most and the least."
-
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=[{
-                "parts": [
-                    {"text": prompt},
-                    {"inline_data": {"mime_type": "image/png", "data": combined_base64}}
+        # Analyze the image using OpenAI's GPT-4
+        client = OpenAI()
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Analyze this UI heatmap showing user gaze data. Identify areas of high and low attention."},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{combined_base64}",
+                        },
+                    },
                 ]
             }]
         )
-        
-        # analysis_result = response.text
-        analysis_data = {
-            "text": response.text,
-            "image": combined_base64  
-        }
-        return jsonify(message="Heatmap uploaded and analyzed successfully")
+
+        analysis_result = completion.choices[0].message.content
+
+        # Store the analysis result and image for this heatmap
+        analysis_data["reports"].append(analysis_result)
+        analysis_data["images"].append(combined_base64)
+
+        # If all 3 images have been processed, pass the results to the crew
+        if len(analysis_data["reports"]) == 3:
+            inputs = {
+                "analysis_result": analysis_data["reports"]
+            }
+            results = UIEvalCrew().crew().kickoff(inputs=inputs)
+            final_report = results.raw
+
+            # Save the final report as a markdown file
+            report_path = save_markdown_report(final_report)
+            analysis_data["final_report"] = final_report
+
+            # Reset the analysis data for the next set of images
+            analysis_data["reports"] = []
+            analysis_data["images"] = []
+
+        return jsonify(message="Heatmap analyzed successfully")
 
     except Exception as e:
         print("Error processing heatmap:", str(e))
         return jsonify(error="Failed to analyze heatmap", details=str(e)), 500
 
-@app.route("/get_analysis", methods=["GET"])
-def get_analysis():
-    if analysis_data["text"]:
-        return jsonify({
-            "analysis": analysis_data["text"],
-            "image": analysis_data["image"]
-        })
-    else:
-        return jsonify(error="No analysis available"), 404
+# @app.route("/get_analysis", methods=["GET"])
+# def get_analysis():
+#     try:
+#         # Safely wrap the multi-line string for JSON
+#         final_report = analysis_data.get("final_report", "").strip()
 
-@app.route("/analysis")
-def analysis():
-    return render_template("analysis.html")
+#         return jsonify({
+#             "final_report": final_report,
+#             "images": analysis_data.get("images", [])
+#         })
+#     except Exception as e:
+#         print("Error in /get_analysis:", str(e))
+#         return jsonify(error="Failed to retrieve analysis", details=str(e)), 500
+
+# @app.route("/analysis")
+# def analysis():
+#     return render_template("analysis.html")
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)
