@@ -1,0 +1,23 @@
+analyze_image_base64:
+  description: Analyze the given {analysis_result} to extract user attention insights and generate an analysis summary.
+  expected_output: A detailed analysis summary outlining key user attention areas and engagement metrics derived from the {analysis_result}.
+  async_execution: false
+  agent: image_analyzer
+  # context:
+  # - convert_image_to_base64
+
+generate_ui_recommendations:
+  description: Based on the analysis summary, generate a list of actionable UI recommendations aimed at enhancing user engagement and usability.
+  expected_output: A comprehensive list of UI improvement suggestions that address identified attention areas and design weaknesses.
+  async_execution: false
+  agent: ui_recommender
+  context:
+  - analyze_image_base64
+
+compile_report:
+  description: Compile the UI recommendations into a structured data dictionary report and prepare for delivery to the user.
+  expected_output: A final data dictionary report that neatly organizes all insights and recommendations based on UI Recommendations.
+  async_execution: false
+  agent: report_compiler
+  context:
+  - generate_ui_recommendations
