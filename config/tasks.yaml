@@ -1,22 +1,35 @@
-analyze_image_base64:
-  description: Analyze the given {analysis_result} to extract user attention insights and generate an analysis summary.
-  expected_output: A detailed analysis summary outlining key user attention areas and engagement metrics derived from the {analysis_result}.
-  async_execution: false
-  agent: image_analyzer
+# analyze_image_base64:
+#   description: Analyze the given {analysis_result} to extract user attention insights and generate an analysis summary.
+#   expected_output: A detailed analysis summary outlining key user attention areas and engagement metrics derived from the {analysis_result}.
+#   async_execution: false
+#   agent: image_analyzer
   # context:
   # - convert_image_to_base64
 
 generate_ui_recommendations:
-  description: Based on the analysis summary, generate a list of actionable UI recommendations aimed at enhancing user engagement and usability.
-  expected_output: A comprehensive list of UI improvement suggestions that address identified attention areas and design weaknesses.
+  description: >
+    Using the insights from {analysis_result}, generate a detailed list of UI recommendations to enhance usability, 
+    accessibility, and user engagement. Each recommendation should include:
+    - A clear description of the issue, including how it deviates from UI/UX best practices such as Nielsen's heuristics and WCAG guidelines.
+    - Specific examples from the UI (e.g., 'The "Add to Basket" button has low contrast with the background').
+    - A detailed explanation of the heatmap correlation (e.g., 'Users focused heavily on the product image but ignored the "Add to Basket" button').
+    - Actionable recommendations with specific steps (e.g., 'Increase the button's contrast to 4.5:1 and reposition it to the top-right corner').
+    - The expected impact of the recommendation.
+    - The priority level of the recommendation (e.g., 'High priority because the issue directly impacts conversion rates').
+  expected_output: >
+    A structured list of UI improvement suggestions per image. Ensure all points are explained in detail with specific examples, actionable steps, and measurable impacts.
   async_execution: false
   agent: ui_recommender
-  context:
-  - analyze_image_base64
 
 compile_report:
-  description: Compile the UI recommendations into a structured data dictionary report and prepare for delivery to the user.
-  expected_output: A final data dictionary report that neatly organizes all insights and recommendations based on UI Recommendations.
+  description: >
+    Compile the UI recommendations and analysis into a structured markdown report without '```'. Follow the guidelines provided to ensure the report is well-organized and easy to read.
+  instructions:
+    One section per image and its corresponding recommendations. Each section should be separated using horizontal rules '---'.
+    Add proper spacing and section breaks. 
+    Format the list of recommendations and analysis as bullet points. 
+    Use emojis where appropriate to enhance readability.
+  expected_output: A final markdown report that neatly organizes all analysis and recommendations.
   async_execution: false
   agent: report_compiler
   context:
