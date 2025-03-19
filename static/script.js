@@ -135,7 +135,7 @@ function startTracking() {
                     const point = {
                         x: Math.floor(x), // Use absolute coordinates
                         y: Math.floor(y), // Use absolute coordinates
-                        value: duration / 1000 // Convert duration to seconds (or adjust as needed)
+                        value: duration / 100 // Convert duration to seconds (or adjust as needed)
                     };
                     heatmapInstance.addData(point);
                 }
