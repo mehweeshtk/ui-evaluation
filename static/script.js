@@ -1,18 +1,23 @@
 // Initialize WebGazer
-window.saveDataAcrossSessions = true;
+window.saveDataAcrossSessions = false;
 
 // Global variables
+let lastGaze = null;
+let lastTime = null;
 let gazeData = [];
 let calibrationComplete = false;
 let heatmapVisible = true;
 let heatmapInstance;
 let currentImageIndex = 0;
 const uiImages = [
-    "/static/ui_images/Dashboard1.png",
-    "/static/ui_images/Dashboard2.png",
-    "/static/ui_images/Dashboard3.png" 
+    "/static/ui_images/image1.png",
+    "/static/ui_images/image2.png",
+    "/static/ui_images/image3.png" 
 ];
 const heatmaps = {};
+
+// randomize the uiImages array 
+uiImages.sort(() => Math.random() - 0.5);
 
 // Debugging: Check if WebGazer is loaded
 if (typeof webgazer === "undefined") {
@@ -21,9 +26,10 @@ if (typeof webgazer === "undefined") {
     console.log("WebGazer.js is loaded successfully.");
 }
 
-// Wait for DOM to load
 window.onload = function () {
     startTracking();
+    const imgElement = document.getElementById("current-ui");
+    imgElement.src = uiImages[0]; 
     document.getElementById("start-calibration").addEventListener("click", startCalibration);
     document.getElementById("toggle-heatmap").addEventListener("click", toggleHeatmap);
     document.getElementById("save-heatmap").addEventListener("click", saveHeatmapLocally);
@@ -33,6 +39,7 @@ window.onload = function () {
 function startCalibration() {
     document.getElementById("start-screen").style.display = "none";
     document.getElementById("calibration-screen").style.display = "flex";
+    webgazer.showVideoPreview(true).showPredictionPoints(true);
 
     const dots = document.querySelectorAll(".dot");
 
@@ -53,6 +60,7 @@ function startCalibration() {
                 calibrationComplete = true;
                 document.getElementById("calibration-screen").style.display = "none";
                 document.getElementById("homepage").style.display = "flex";
+                webgazer.showVideoPreview(false).showPredictionPoints(true);
             }
         });
     });
@@ -65,7 +73,7 @@ function initializeHeatmap() {
         return;
     }
 
-    let container = document.getElementById("homepage");
+    let container = document.getElementById("heatmap-container");
     if (!container) {
         console.error("Heatmap container (#homepage) not found.");
         return;
@@ -87,46 +95,57 @@ function initializeHeatmap() {
     // Set the height of the heatmap canvas dynamically
     const heatmapCanvas = container.querySelector("canvas");
     if (heatmapCanvas) {
-        heatmapCanvas.style.height = '620px'; // Set your desired height
+        heatmapCanvas.style.height = '650px'; 
+        heatmapCanvas.style.width = '1000px'; 
+        heatmapCanvas.style.position = 'absolute';
+        heatmapCanvas.style.top = '0';
+        heatmapCanvas.style.left = '0';
     }
 }
 
 
-// Modify startTracking function
 function startTracking() {
     initializeHeatmap();
     
     // Configure webgazer video feed
     webgazer.params.showVideoPreview = true;
+    webgazer.applyKalmanFilter(true);
+    webgazer.setRegression('ridge');
     
-// Updated gaze listener
-webgazer.setGazeListener((data) => {
-    if (data && document.getElementById("homepage").style.display === "flex") {
-        const imgElement = document.getElementById("current-ui");
-        const rect = imgElement.getBoundingClientRect();
-        
-        // Calculate relative coordinates within the image
-        const x = data.x - rect.left;
-        const y = data.y - rect.top;
-        
-        // Only record points within image bounds
-        if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
-            heatmaps[currentImageIndex] = heatmaps[currentImageIndex] || [];
-            heatmaps[currentImageIndex].push({
-                x: (x / rect.width * 100),  // Convert to percentage
-                y: (y / rect.height * 100), // Convert to percentage
-                value: 1
-            });
+    // Updated gaze listener using eyeListener logic
+    webgazer.setGazeListener((data, clock) => {
+        if (data && document.getElementById("homepage").style.display === "flex") {
+            const imgElement = document.getElementById("current-ui");
+            const rect = imgElement.getBoundingClientRect();
+            
+            // Calculate relative coordinates within the image
+            const x = data.x - rect.left;
+            const y = data.y - rect.top;
+            
+            // Only record points within image bounds
+            if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
+                // Initialize lastTime if not set
+                if (!lastTime) {
+                    lastTime = clock;
+                }
 
-            // Update heatmap with relative coordinates
-            heatmapInstance.addData({
-                x: x,
-                y: y,
-                value: 1
-            });
+                // Track gaze duration
+                if (lastGaze) {
+                    const duration = clock - lastTime;
+                    const point = {
+                        x: Math.floor(x), // Use absolute coordinates
+                        y: Math.floor(y), // Use absolute coordinates
+                        value: duration / 1000 // Convert duration to seconds (or adjust as needed)
+                    };
+                    heatmapInstance.addData(point);
+                }
+
+                // Update lastGaze and lastTime
+                lastGaze = { x, y };
+                lastTime = clock;
+            }
         }
-    }
-}).begin();
+    }).begin();
 }
 
 // 4. Add heatmap reset when changing images
@@ -145,6 +164,8 @@ function loadUIImage(index) {
             });
         }
         heatmaps[currentImageIndex] = [];
+        lastGaze = null; 
+        lastTime = null; 
     };
     imgElement.src = uiImages[currentImageIndex];
 }
@@ -155,42 +176,14 @@ document.getElementById("prev-ui").addEventListener("click", () => loadUIImage(c
 
 // Toggle Heatmap Visibility
 function toggleHeatmap() {
-    heatmapVisible = !heatmapVisible;
-    document.getElementById("heatmap-container").style.display = heatmapVisible ? "block" : "none";
+    const heatmapContainer = document.getElementById("heatmap-container");
+    if (heatmapContainer) {
+        heatmapVisible = !heatmapVisible; // Toggle the visibility state
+        heatmapContainer.style.display = heatmapVisible ? "block" : "none"; // Show or hide the heatmap
+    } else {
+        console.error("Heatmap container not found.");
+    }
 }
-
-// // Save Heatmap Locally
-// function saveHeatmapLocally() {
-//     const heatmapCanvas = document.querySelector("#heatmap-container canvas");
-//     if (!heatmapCanvas) {
-//         console.error("Heatmap canvas not found.");
-//         return;
-//     }
-
-//     const heatmapDataURL = heatmapCanvas.toDataURL("image/png");
-//     const downloadLink = document.createElement("a");
-//     downloadLink.href = heatmapDataURL;
-//     downloadLink.download = `heatmap_${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
-//     downloadLink.click();
-// }
-
-// function checkModelStatusAndUpload(formData) {
-//     fetch("http://127.0.0.1:5000/model_status") // API to check if model is ready
-//         .then(response => response.json())
-//         .then(data => {
-//             if (data.status === "loading") {
-//                 console.log(`Model is still loading, retrying in 10 seconds...`);
-//                 setTimeout(() => checkModelStatusAndUpload(formData), 10000); // Retry after 10 seconds
-//             } else if (data.status === "ready") {
-//                 console.log("Model is ready! Uploading heatmap...");
-//                 uploadHeatmap(formData);
-//             }
-//         })
-//         .catch(error => {
-//             console.error("Error checking model status:", error);
-//             alert("Error: Unable to check model status. Please try again later.");
-//         });
-// }
 
 // Save Heatmap Locally
 function saveHeatmapLocally() {
@@ -274,29 +267,3 @@ function uploadHeatmap(formData) {
         alert("Error: Unable to upload heatmap. Please try again later.");
     });
 }
-
-// Show Analysis
-function showAnalysis() {
-    fetch("http://127.0.0.1:5000/get_analysis")
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.error) {
-                alert("Error: " + data.error);
-            } else {
-                // Redirect to the analysis page
-                window.location.href = "/analysis";
-            }
-        })
-        .catch(error => {
-            console.error("Error fetching analysis:", error);
-            alert("Error: Unable to fetch analysis. Please try again later.");
-        });
-}
-
-// Add event listener for "Show Analysis" button
-document.getElementById("show-analysis").addEventListener("click", showAnalysis);
